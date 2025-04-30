@@ -51,36 +51,39 @@ h2 {
   background-color: #3a66cc;
 }
 
-.repo-grid {
+.agent-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
 }
 
-.repo-card {
+.agent-card {
   border: 1px solid #eaeaea;
   border-radius: 8px;
   padding: 1.5rem;
   transition: transform 0.2s, box-shadow 0.2s;
+  background: linear-gradient(to bottom right, #fcfcfc, #f9f3f3);
 }
 
-.repo-card:hover {
+.agent-card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 25px rgba(255, 70, 85, 0.15);
+  border-color: #ff4655;
 }
 
-.repo-card h3 {
+.agent-card h3 {
   margin-top: 0;
   margin-bottom: 1rem;
+  color: #0f1923;
 }
 
-.topics {
+.abilities {
   display: flex;
   flex-wrap: wrap;
   margin: 1rem 0;
 }
 
-.topic {
+.ability {
   background-color: #f0f5ff;
   color: #4a7bff;
   padding: 0.2rem 0.6rem;
@@ -90,7 +93,7 @@ h2 {
   margin-bottom: 0.5rem;
 }
 
-.repo-card a {
+.agent-card a {
   display: inline-block;
   margin-top: 1rem;
   color: #4a7bff;
@@ -98,8 +101,18 @@ h2 {
   font-weight: 500;
 }
 
-.repo-card a:hover {
+.agent-card a:hover {
   text-decoration: underline;
+}
+
+.agent-role {
+  display: inline-block;
+  margin-top: 1rem;
+  color: #ff4655;
+  font-weight: 500;
+  background-color: #ffeaec;
+  padding: 0.3rem 0.8rem;
+  border-radius: 4px;
 }
 
 footer {
@@ -111,7 +124,7 @@ footer {
 }
 
 @media (max-width: 768px) {
-  .repo-grid {
+  .agent-grid {
     grid-template-columns: 1fr;
   }
 }

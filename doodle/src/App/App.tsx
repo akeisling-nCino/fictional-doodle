@@ -2,49 +2,43 @@ import "./App.css";
 
 const personalInfo = {
   name: "Austin Keisling",
-  title: "Software Engineer",
-  bio: "I'm a passionate technologist who loves building web applications, automating tasks, and solving problems.",
-  github: "https://github.com/akeisling-ncino",
-  linkedin: "https://linkedin.com/in/austin-a-keisling",
+  title: "Valorant Enthusiast",
+  bio: "I'm a passionate gamer who loves tactical shooters, especially Valorant. Here's my collection of favorite agents and their abilities.",
+  twitter: "https://twitter.com/PlayVALORANT",
+  valorant: "https://playvalorant.com/",
 };
 
-const repositories = [
+const agents = [
   {
-    name: "fictional-doodle",
-    description:
-      "A simple web application built with React, TypeScript, and Vite",
-    url: "https://github.com/akeisling-ncino/fictional-doodle",
-    topics: ["react", "typescript", "vite"],
+    name: "Jett",
+    description: 
+      "Korean agent who excels at mobility and quick strikes",
+    role: "Duelist",
+    abilities: ["Updraft", "Tailwind", "Cloudburst", "Blade Storm"],
   },
   {
-    name: "force-nComplianceUS",
-    description: "A Salesforce app for managing compliance",
-    url: "https://github.com/ncino/force-nComplianceUS",
-    topics: ["salesforce", "javascript", "apex"],
+    name: "Reyna",
+    description: "Mexican agent who thrives on getting kills to heal and dismiss",
+    role: "Duelist",
+    abilities: ["Devour", "Dismiss", "Leer", "Empress"],
   },
   {
-    name: "force-nSBA",
-    description: "ETran integration for SBA",
-    url: "https://github.com/ncino/force-nSBA",
-    topics: ["salesforce", "javascript", "apex"],
+    name: "Chamber",
+    description: "French weapons expert with precise gunplay and teleportation",
+    role: "Sentinel",
+    abilities: ["Headhunter", "Rendezvous", "Trademark", "Tour De Force"],
   },
   {
-    name: "force-customer-onboarding",
-    description: "A Salesforce app for managing customer onboarding",
-    url: "https://github.com/ncino/force-customer-onboarding",
-    topics: ["salesforce", "javascript", "apex"],
+    name: "Killjoy",
+    description: "German genius who secures areas with her inventions",
+    role: "Sentinel",
+    abilities: ["Alarmbot", "Turret", "Nanoswarm", "Lockdown"],
   },
   {
-    name: "aws-business-banking",
-    description: "An AWS Lambda function for business banking",
-    url: "https://github.com/ncino/aws-business-banking",
-    topics: ["aws", "lambda", "typescript"],
-  },
-  {
-    name: "aws-omni-channel",
-    description: "A Ruby on Rails app for omni-channel",
-    url: "https://github.com/ncino/aws-omni-channel",
-    topics: ["ruby", "vue", "typescript"],
+    name: "Omen",
+    description: "Mysterious shadow who can teleport and blind enemies",
+    role: "Controller",
+    abilities: ["Paranoia", "Dark Cover", "Shrouded Step", "From the Shadows"],
   },
 ];
 
@@ -61,39 +55,37 @@ function App() {
         <p>{personalInfo.bio}</p>
         <div className="social-links">
           <a
-            href={personalInfo.github}
+            href={personalInfo.twitter}
             target="_blank"
             rel="noopener noreferrer"
           >
-            GitHub
+            Twitter
           </a>
           <a
-            href={personalInfo.linkedin}
+            href={personalInfo.valorant}
             target="_blank"
             rel="noopener noreferrer"
           >
-            LinkedIn
+            Play Valorant
           </a>
         </div>
       </section>
 
-      <section className="repositories">
-        <h2>My Projects</h2>
-        <div className="repo-grid">
-          {repositories.map((repo) => (
-            <div className="repo-card" key={repo.name}>
-              <h3>{repo.name}</h3>
-              <p>{repo.description}</p>
-              <div className="topics">
-                {repo.topics.map((topic) => (
-                  <span className="topic" key={topic}>
-                    {topic}
+      <section className="agents">
+        <h2>Top Valorant Agents</h2>
+        <div className="agent-grid">
+          {agents.map((agent) => (
+            <div className="agent-card" key={agent.name}>
+              <h3>{agent.name}</h3>
+              <p>{agent.description}</p>
+              <div className="abilities">
+                {agent.abilities.map((ability) => (
+                  <span className="ability" key={ability}>
+                    {ability}
                   </span>
                 ))}
               </div>
-              <a href={repo.url} target="_blank" rel="noopener noreferrer">
-                View on GitHub
-              </a>
+              <span className="agent-role">Role: {agent.role}</span>
             </div>
           ))}
         </div>

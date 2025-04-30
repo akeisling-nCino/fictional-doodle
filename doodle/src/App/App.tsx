@@ -11,8 +11,7 @@ const personalInfo = {
 const agents = [
   {
     name: "Jett",
-    description: 
-      "Korean agent who excels at mobility and quick strikes",
+    description: "Korean agent who excels at mobility and quick strikes",
     role: "Duelist",
     abilities: ["Updraft", "Tailwind", "Cloudburst", "Blade Storm"],
   },
@@ -39,6 +38,120 @@ const agents = [
     description: "Mysterious shadow who can teleport and blind enemies",
     role: "Controller",
     abilities: ["Paranoia", "Dark Cover", "Shrouded Step", "From the Shadows"],
+  },
+  {
+    name: "Astra",
+    description: "Ghanaian agent who harnesses the cosmos to reshape battlefields",
+    role: "Controller",
+    abilities: ["Nova Pulse", "Nebula", "Gravity Well", "Cosmic Divide"],
+  },
+  {
+    name: "Breach",
+    description: "Swedish initiator who uses seismic blasts to disable opponents",
+    role: "Initiator",
+    abilities: ["Flashpoint", "Fault Line", "Aftershock", "Rolling Thunder"],
+  },
+  {
+    name: "Brimstone",
+    description: "American commander with orbital tactical abilities",
+    role: "Controller",
+    abilities: ["Incendiary", "Sky Smoke", "Stim Beacon", "Orbital Strike"],
+  },
+  {
+    name: "Cypher",
+    description: "Moroccan surveillance expert who keeps tabs on the enemy's movements",
+    role: "Sentinel",
+    abilities: ["Cyber Cage", "Spycam", "Trapwire", "Neural Theft"],
+  },
+  {
+    name: "Deadlock",
+    description: "Norwegian sentinel who uses nanowire to create barriers",
+    role: "Sentinel",
+    abilities: ["Sonic Sensor", "Barrier Mesh", "GravNet", "Annihilation"],
+  },
+  {
+    name: "Fade",
+    description: "Turkish initiator who harnesses nightmares to reveal enemies",
+    role: "Initiator",
+    abilities: ["Haunt", "Seize", "Prowler", "Nightfall"],
+  },
+  {
+    name: "Gekko",
+    description: "Los Angeles native with creatures that help secure areas",
+    role: "Initiator",
+    abilities: ["Wingman", "Dizzy", "Mosh Pit", "Thrash"],
+  },
+  {
+    name: "Harbor",
+    description: "Indian controller who bends water to shield allies",
+    role: "Controller",
+    abilities: ["Cove", "High Tide", "Cascade", "Reckoning"],
+  },
+  {
+    name: "ISO",
+    description: "Chinese duelist who channels kinetic energy",
+    role: "Duelist",
+    abilities: ["Contingency", "Undercut", "Double Tap", "Kill Contract"],
+  },
+  {
+    name: "KAY/O",
+    description: "Robot initiator built for one thing: neutralizing radiants",
+    role: "Initiator",
+    abilities: ["FLASH/drive", "ZERO/point", "FRAG/ment", "NULL/cmd"],
+  },
+  {
+    name: "Neon",
+    description: "Filipino agent who races ahead to catch enemies off guard",
+    role: "Duelist",
+    abilities: ["High Gear", "Relay Bolt", "Fast Lane", "Overdrive"],
+  },
+  {
+    name: "Phoenix",
+    description: "British duelist who controls fire and can self-revive",
+    role: "Duelist",
+    abilities: ["Curveball", "Hot Hands", "Blaze", "Run It Back"],
+  },
+  {
+    name: "Raze",
+    description: "Brazilian demolition expert who causes explosive damage",
+    role: "Duelist",
+    abilities: ["Blast Pack", "Paint Shells", "Boom Bot", "Showstopper"],
+  },
+  {
+    name: "Sage",
+    description: "Chinese healer who can resurrect allies and create barriers",
+    role: "Sentinel",
+    abilities: ["Healing Orb", "Barrier Orb", "Slow Orb", "Resurrection"],
+  },
+  {
+    name: "Skye",
+    description: "Australian initiator who uses animal spirits to gather information",
+    role: "Initiator",
+    abilities: ["Trailblazer", "Guiding Light", "Regrowth", "Seekers"],
+  },
+  {
+    name: "Sova",
+    description: "Russian initiator who locates enemies with reconnaissance tools",
+    role: "Initiator",
+    abilities: ["Shock Bolt", "Recon Bolt", "Owl Drone", "Hunter's Fury"],
+  },
+  {
+    name: "Viper",
+    description: "American chemist who deploys poisonous gas and screens",
+    role: "Controller",
+    abilities: ["Snake Bite", "Poison Cloud", "Toxic Screen", "Viper's Pit"],
+  },
+  {
+    name: "Yoru",
+    description: "Japanese duelist who uses dimensional rifts to deceive enemies",
+    role: "Duelist",
+    abilities: ["Blindside", "Gatecrash", "Fakeout", "Dimensional Drift"],
+  },
+  {
+    name: "Clove",
+    description: "British controller who manipulates time to support team",
+    role: "Controller",
+    abilities: ["Meddle", "Pick-Me-Up", "Ruse", "Not Dead Yet"],
   },
 ];
 
@@ -72,7 +185,7 @@ function App() {
       </section>
 
       <section className="agents">
-        <h2>Top Valorant Agents</h2>
+        <h2>All Valorant Agents</h2>
         <div className="agent-grid">
           {agents.map((agent) => (
             <div className="agent-card" key={agent.name}>

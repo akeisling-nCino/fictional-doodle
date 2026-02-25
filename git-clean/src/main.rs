@@ -18,7 +18,32 @@ fn main() {
         .expect("Failed to run git");
 
     if !prune.success() {
-        eprintln!("git rmeote prune failed");
+        eprintln!("git remote prune failed");
         std::process::exit(1);
+    }
+
+    let output = std::process::Command::new("git")
+        .args(["branch", "-vv"])
+        .output()
+        .expect("Failed to run git branch");
+
+    let stdout = String::from_utf8(output.stdout).expect("git output was not valid UTF-8");
+
+    let gone_branches: Vec<&str> = stdout
+        .lines()
+        .filter(|line| line.contains(": gone"))
+        .map(|line| {
+            line.trim()
+                .trim_start_matches('*')
+                .trim()
+                .split_whitespace()
+                .next()
+                .unwrap()
+        })
+        .collect();
+
+    println!("Found {} branches to delete", gone_branches.len());
+    for branch in &gone_branches {
+        println!("{branch}")
     }
 }

@@ -10,7 +10,7 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-    println!("Pruning stale remote tracking branches...");
+    println!("{}", "Pruning stale remote tracking branches...".cyan());
 
     let prune = std::process::Command::new("git")
         .args(["remote", "prune", "origin"])
@@ -42,8 +42,37 @@ fn main() {
         })
         .collect();
 
-    println!("Found {} branches to delete", gone_branches.len());
+    if gone_branches.is_empty() {
+        println!("{}", "No branches to delete.".green());
+        return;
+    }
+
+    let protected = ["main", "master", "develop", "release"];
+
     for branch in &gone_branches {
-        println!("{branch}")
+        if protected.contains(branch) {
+            println!(
+                "{}",
+                format!("Skipping protected branch: {branch}")
+                    .yellow()
+                    .bold()
+            );
+            continue;
+        }
+
+        if cli.preview {
+            println!("{}", format!("Would delete: {branch}").yellow());
+        } else {
+            let result = std::process::Command::new("git")
+                .args(["branch", "-D", branch])
+                .output()
+                .expect("Failed to run git branch -D");
+
+            if result.status.success() {
+                println!("{}", format!("Deleted: {branch}").red());
+            } else {
+                eprintln!("{}", format!("Failed to delete: {branch}").red().bold());
+            }
+        }
     }
 }

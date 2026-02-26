@@ -51,7 +51,7 @@ fn clean_repo(path: &Path, preview: bool) {
                 .trim()
                 .to_string();
             if preview {
-                println!("    {} {}", "Would prune and delete:".yellow(), branch);
+                println!("    {} {}", "Would prune:".yellow(), branch);
             } else {
                 println!("    {} {}", "Pruned:".yellow(), branch);
             }
@@ -81,7 +81,7 @@ fn clean_repo(path: &Path, preview: bool) {
 
     if gone_branches.is_empty() {
         if !preview {
-            println!("{}", "  No branches to delete.".green());
+            println!("{}", "  No local branches to delete.".green());
         }
         return;
     }

@@ -1,31 +1,30 @@
 use clap::Parser;
 use colored::Colorize;
 use std::env;
+use std::fmt::Write;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
+use std::thread;
 
 #[derive(Parser)]
 #[command(about = "Delete local branches whose remote has been merged and deleted")]
 struct Cli {
-    #[arg(short, long, help = "Preview branches to delete without deleting them")]
-    preview: bool,
-
     #[arg(short, long, help = "Directory to scan for git repos")]
     dir: Option<PathBuf>,
 }
 
-fn clean_repo(path: &Path, preview: bool) {
-    println!("\n{}", format!("Repo: {}", path.display()).bold());
-    println!(
+fn clean_repo(path: &Path) -> String {
+    let mut output = String::new();
+    writeln!(output, "{}", format!("Repo: {}", path.display()).bold()).unwrap();
+    writeln!(
+        output,
         "{}",
         "  Pruning stale remote tracking branches...".cyan().bold()
-    );
+    )
+    .unwrap();
 
-    let mut prune_args = vec!["remote", "prune", "origin"];
-    if preview {
-        prune_args.push("--dry-run");
-    }
+    let prune_args = vec!["remote", "prune", "origin"];
 
     let prune = Command::new("git")
         .args(&prune_args)
@@ -35,13 +34,13 @@ fn clean_repo(path: &Path, preview: bool) {
 
     if !prune.status.success() {
         eprintln!("{}", "git remote prune failed".red().bold());
-        return;
+        return output;
     }
 
     let prune_output = String::from_utf8(prune.stdout).expect("git output was not valid UTF-8");
 
     for line in prune_output.lines() {
-        if line.contains("[would prune]") || line.contains("[pruned]") {
+        if line.contains("[pruned]") {
             let branch = line
                 .trim()
                 .trim_start_matches("*")
@@ -50,21 +49,17 @@ fn clean_repo(path: &Path, preview: bool) {
                 .replace("[pruned]", "")
                 .trim()
                 .to_string();
-            if preview {
-                println!("    {} {}", "Would prune:".yellow(), branch);
-            } else {
-                println!("    {} {}", "Pruned:".yellow(), branch);
-            }
+            writeln!(output, "    {} {}", "Pruned:".yellow(), branch).unwrap();
         }
     }
 
-    let output = Command::new("git")
+    let branch_output = Command::new("git")
         .args(["branch", "-vv"])
         .current_dir(path)
         .output()
         .expect("Failed to run git branch");
 
-    let stdout = String::from_utf8(output.stdout).expect("git output was not valid UTF-8");
+    let stdout = String::from_utf8(branch_output.stdout).expect("git output was not valid UTF-8");
 
     let gone_branches: Vec<&str> = stdout
         .lines()
@@ -80,41 +75,37 @@ fn clean_repo(path: &Path, preview: bool) {
         .collect();
 
     if gone_branches.is_empty() {
-        if !preview {
-            println!("{}", "  No local branches to delete.".green());
-        }
-        return;
+        writeln!(output, "{}", "  No local branches to delete.".green()).unwrap();
+        return output;
     }
 
     let protected = ["main", "master", "develop", "release"];
 
     for branch in &gone_branches {
         if protected.contains(branch) {
-            println!(
+            writeln!(
+                output,
                 "{}",
                 format!("  Skipping protected branch: {branch}")
                     .yellow()
                     .bold()
-            );
+            )
+            .unwrap();
             continue;
         }
+        let result = Command::new("git")
+            .args(["branch", "-D", branch])
+            .current_dir(path)
+            .output()
+            .expect("Failed to run git branch -D");
 
-        if preview {
-            println!("{}", format!("  Would delete: {branch}").yellow());
+        if result.status.success() {
+            writeln!(output, "{}", format!("  Deleted: {branch}").red()).unwrap();
         } else {
-            let result = Command::new("git")
-                .args(["branch", "-D", branch])
-                .current_dir(path)
-                .output()
-                .expect("Failed to run git branch -D");
-
-            if result.status.success() {
-                println!("{}", format!("  Deleted: {branch}").red());
-            } else {
-                eprintln!("{}", format!("  Failed to delete: {branch}").red().bold());
-            }
+            eprintln!("{}", format!("  Failed to delete: {branch}").red().bold());
         }
     }
+    output
 }
 
 fn main() {
@@ -125,7 +116,7 @@ fn main() {
     };
 
     if current_dir.join(".git").exists() {
-        clean_repo(&current_dir, cli.preview);
+        print!("{}", clean_repo(&current_dir));
         return;
     }
 
@@ -141,7 +132,12 @@ fn main() {
         process::exit(1);
     }
 
-    for repo in &repos {
-        clean_repo(repo, cli.preview);
+    let handles: Vec<_> = repos
+        .into_iter()
+        .map(|repo| thread::spawn(move || clean_repo(&repo)))
+        .collect();
+
+    for handle in handles {
+        print!("{}", handle.join().unwrap());
     }
 }

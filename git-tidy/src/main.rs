@@ -33,8 +33,7 @@ fn clean_repo(path: &Path) -> String {
         .expect("Failed to run git remote prune");
 
     if !prune.status.success() {
-        eprintln!("{}", "git remote prune failed".red().bold());
-        return output;
+        writeln!(output, "{}", "git remote prune failed".red().bold()).unwrap();
     }
 
     let prune_output = String::from_utf8(prune.stdout).expect("git output was not valid UTF-8");
@@ -67,7 +66,6 @@ fn clean_repo(path: &Path) -> String {
         .map(|line| {
             line.trim()
                 .trim_start_matches('*')
-                .trim()
                 .split_whitespace()
                 .next()
                 .unwrap()
@@ -102,7 +100,7 @@ fn clean_repo(path: &Path) -> String {
         if result.status.success() {
             writeln!(output, "{}", format!("  Deleted: {branch}").red()).unwrap();
         } else {
-            eprintln!("{}", format!("  Failed to delete: {branch}").red().bold());
+            writeln!(output, "{}", format!("  Failed to delete: {branch}").red().bold()).unwrap();
         }
     }
     output

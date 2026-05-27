@@ -33,7 +33,7 @@ fn clean_repo(path: &Path) -> String {
         .expect("Failed to run git remote prune");
 
     if !prune.status.success() {
-        writeln!(output, "{}", "git remote prune failed".red().bold()).unwrap();
+        writeln!(output, "    {}", "git remote prune failed".red().bold()).unwrap();
     }
 
     let prune_output = String::from_utf8(prune.stdout).expect("git output was not valid UTF-8");

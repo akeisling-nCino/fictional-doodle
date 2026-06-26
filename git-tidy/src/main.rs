@@ -3,9 +3,38 @@ use colored::Colorize;
 use std::env;
 use std::fmt::Write;
 use std::fs;
+use std::string::FromUtf8Error;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::thread;
+
+#[derive(Debug)]
+enum TidyError {
+    Io(std::io::Error),
+    Utf8(FromUtf8Error)
+}
+
+impl std::fmt::Display for TidyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TidyError::Io(e) => write!(f, "IO error: {e}"),
+            TidyError::Utf8(e) => write!(f, "UTF-8 error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for TidyError {}
+
+impl From<std::io::Error> for TidyError {
+    fn from(e: std::io::Error) -> Self {
+        TidyError::Io(e)
+    }
+}
+impl From<FromUtf8Error> for TidyError {
+    fn from(e: FromUtf8Error) -> Self {
+        TidyError::Utf8(e)
+    }
+}
 
 #[derive(Parser)]
 #[command(about = "Delete local branches whose remote has been merged and deleted")]
@@ -14,29 +43,27 @@ struct Cli {
     dir: Option<PathBuf>,
 }
 
-fn clean_repo(path: &Path) -> String {
+fn clean_repo(path: &Path) -> Result<String, TidyError> {
     let mut output = String::new();
-    writeln!(output, "{}", format!("Repo: {}", path.display()).bold()).unwrap();
+    writeln!(output, "{}", format!("Repo: {}", path.display()).bold());
     writeln!(
         output,
         "{}",
         "  Pruning stale remote tracking branches...".cyan().bold()
-    )
-    .unwrap();
+    );
 
     let prune_args = vec!["remote", "prune", "origin"];
 
     let prune = Command::new("git")
         .args(&prune_args)
         .current_dir(path)
-        .output()
-        .expect("Failed to run git remote prune");
+        .output()?;
 
     if !prune.status.success() {
-        writeln!(output, "    {}", "git remote prune failed".red().bold()).unwrap();
+        writeln!(output, "    {}", "git remote prune failed".red().bold());
     }
 
-    let prune_output = String::from_utf8(prune.stdout).expect("git output was not valid UTF-8");
+    let prune_output = String::from_utf8(prune.stdout)?;
 
     for line in prune_output.lines() {
         if line.contains("[pruned]") {
@@ -48,33 +75,30 @@ fn clean_repo(path: &Path) -> String {
                 .replace("[pruned]", "")
                 .trim()
                 .to_string();
-            writeln!(output, "    {} {}", "Pruned:".yellow(), branch).unwrap();
+            writeln!(output, "    {} {}", "Pruned:".yellow(), branch);
         }
     }
 
     let branch_output = Command::new("git")
         .args(["branch", "-vv"])
         .current_dir(path)
-        .output()
-        .expect("Failed to run git branch");
+        .output()?;
 
-    let stdout = String::from_utf8(branch_output.stdout).expect("git output was not valid UTF-8");
+    let stdout = String::from_utf8(branch_output.stdout)?;
 
     let gone_branches: Vec<&str> = stdout
         .lines()
         .filter(|line| line.contains(": gone"))
-        .map(|line| {
+        .filter_map(|line| {
             line.trim()
                 .trim_start_matches('*')
                 .split_whitespace()
                 .next()
-                .unwrap()
         })
         .collect();
-
     if gone_branches.is_empty() {
-        writeln!(output, "{}", "  No local branches to delete.".green()).unwrap();
-        return output;
+        writeln!(output, "{}", "  No local branches to delete.".green());
+        return Ok(output);
     }
 
     let protected = ["main", "master", "develop", "release"];
@@ -87,39 +111,36 @@ fn clean_repo(path: &Path) -> String {
                 format!("  Skipping protected branch: {branch}")
                     .yellow()
                     .bold()
-            )
-            .unwrap();
+            );
             continue;
         }
         let result = Command::new("git")
             .args(["branch", "-D", branch])
             .current_dir(path)
-            .output()
-            .expect("Failed to run git branch -D");
+            .output()?;
 
         if result.status.success() {
-            writeln!(output, "{}", format!("  Deleted: {branch}").red()).unwrap();
+            writeln!(output, "{}", format!("  Deleted: {branch}").red());
         } else {
-            writeln!(output, "{}", format!("  Failed to delete: {branch}").red().bold()).unwrap();
+            writeln!(output, "{}", format!("  Failed to delete: {branch}").red().bold());
         }
     }
-    output
+    Ok(output)
 }
 
-fn main() {
+fn main() -> Result<(), TidyError> {
     let cli = Cli::parse();
     let current_dir = match cli.dir {
         Some(path) => path,
-        None => env::current_dir().expect("Could not get current directory"),
+        None => env::current_dir()?,
     };
 
     if current_dir.join(".git").exists() {
-        print!("{}", clean_repo(&current_dir));
-        return;
+        print!("{}", clean_repo(&current_dir)?);
+        return Ok(());
     }
 
-    let repos: Vec<PathBuf> = fs::read_dir(&current_dir)
-        .expect("Could not read directory")
+    let repos: Vec<PathBuf> = fs::read_dir(&current_dir)?
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
         .filter(|path| path.is_dir() && path.join(".git").exists())
@@ -136,6 +157,11 @@ fn main() {
         .collect();
 
     for handle in handles {
-        print!("{}", handle.join().unwrap());
+        match handle.join() {
+            Ok(Ok(out)) => println!("{out}"),
+            Ok(Err(e)) => eprintln!("Error: {e}"),
+            Err(_) => eprintln!("A worker thread panicked")
+        }
     }
+    Ok(())
 }

@@ -45,8 +45,8 @@ struct Cli {
 
 fn clean_repo(path: &Path) -> Result<String, TidyError> {
     let mut output = String::new();
-    writeln!(output, "{}", format!("Repo: {}", path.display()).bold());
-    writeln!(
+    let _ = writeln!(output, "{}", format!("Repo: {}", path.display()).bold());
+    let _ = writeln!(
         output,
         "{}",
         "  Pruning stale remote tracking branches...".cyan().bold()
@@ -60,7 +60,7 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
         .output()?;
 
     if !prune.status.success() {
-        writeln!(output, "    {}", "git remote prune failed".red().bold());
+        let _ = writeln!(output, "    {}", "git remote prune failed".red().bold());
     }
 
     let prune_output = String::from_utf8(prune.stdout)?;
@@ -75,7 +75,7 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
                 .replace("[pruned]", "")
                 .trim()
                 .to_string();
-            writeln!(output, "    {} {}", "Pruned:".yellow(), branch);
+            let _ = writeln!(output, "    {} {}", "Pruned:".yellow(), branch);
         }
     }
 
@@ -97,7 +97,7 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
         })
         .collect();
     if gone_branches.is_empty() {
-        writeln!(output, "{}", "  No local branches to delete.".green());
+        let _ = writeln!(output, "{}", "  No local branches to delete.".green());
         return Ok(output);
     }
 
@@ -105,7 +105,7 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
 
     for branch in &gone_branches {
         if protected.contains(branch) {
-            writeln!(
+            let _ = writeln!(
                 output,
                 "{}",
                 format!("  Skipping protected branch: {branch}")
@@ -120,9 +120,9 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
             .output()?;
 
         if result.status.success() {
-            writeln!(output, "{}", format!("  Deleted: {branch}").red());
+            let _ = writeln!(output, "{}", format!("  Deleted: {branch}").red());
         } else {
-            writeln!(output, "{}", format!("  Failed to delete: {branch}").red().bold());
+            let _ = writeln!(output, "{}", format!("  Failed to delete: {branch}").red().bold());
         }
     }
     Ok(output)

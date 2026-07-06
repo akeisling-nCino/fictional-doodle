@@ -86,6 +86,11 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
 
     let stdout = String::from_utf8(branch_output.stdout)?;
 
+    let current_branch = stdout
+        .lines()
+        .find(|line| line.trim_start().starts_with('*'))
+        .and_then(|line| line.trim_start_matches('*').trim().split_whitespace().next());
+
     let gone_branches: Vec<&str> = stdout
         .lines()
         .filter(|line| line.contains(": gone"))
@@ -114,6 +119,66 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
             );
             continue;
         }
+
+        if current_branch == Some(*branch) {
+            let status = Command::new("git")
+                .args(["status", "--porcelain"])
+                .current_dir(path)
+                .output()?;
+
+            if !status.stdout.is_empty() {
+                let _ = writeln!(
+                    output,
+                    "{}",
+                    format!(
+                        "  Skipping {branch}: currently checked out with uncommitted changes"
+                    )
+                    .yellow()
+                    .bold()
+                );
+                continue;
+            }
+
+            let fallback = ["release", "main", "master"].into_iter().find(|candidate| {
+                Command::new("git")
+                    .args(["rev-parse", "--verify", "--quiet", candidate])
+                    .current_dir(path)
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false)
+            });
+
+            match fallback {
+                Some(fallback) => {
+                    let checkout = Command::new("git")
+                        .args(["checkout", fallback])
+                        .current_dir(path)
+                        .output()?;
+
+                    if !checkout.status.success() {
+                        let _ = writeln!(
+                            output,
+                            "{}",
+                            format!("  Skipping {branch}: could not switch off checked-out branch")
+                                .yellow()
+                                .bold()
+                        );
+                        continue;
+                    }
+                }
+                None => {
+                    let _ = writeln!(
+                        output,
+                        "{}",
+                        format!("  Skipping {branch}: currently checked out, no main/master to switch to")
+                            .yellow()
+                            .bold()
+                    );
+                    continue;
+                }
+            }
+        }
+
         let result = Command::new("git")
             .args(["branch", "-D", branch])
             .current_dir(path)

@@ -65,6 +65,7 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
 
     let prune_output = String::from_utf8(prune.stdout)?;
 
+    let mut pruned_branches: Vec<String> = Vec::new();
     for line in prune_output.lines() {
         if line.contains("[pruned]") {
             let branch = line
@@ -76,6 +77,9 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
                 .trim()
                 .to_string();
             let _ = writeln!(output, "    {} {}", "Pruned:".yellow(), branch);
+            if let Some(name) = branch.strip_prefix("origin/") {
+                pruned_branches.push(name.to_string());
+            }
         }
     }
 
@@ -91,6 +95,17 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
         .find(|line| line.trim_start().starts_with('*'))
         .and_then(|line| line.trim_start_matches('*').trim().split_whitespace().next());
 
+    let local_branch_names: Vec<&str> = stdout
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .trim_start_matches('*')
+                .trim()
+                .split_whitespace()
+                .next()
+        })
+        .collect();
+
     let gone_branches: Vec<&str> = stdout
         .lines()
         .filter(|line| line.contains(": gone"))
@@ -101,14 +116,23 @@ fn clean_repo(path: &Path) -> Result<String, TidyError> {
                 .next()
         })
         .collect();
-    if gone_branches.is_empty() {
+
+    let mut branches_to_delete: Vec<&str> = gone_branches;
+    for pruned in &pruned_branches {
+        let name = pruned.as_str();
+        if local_branch_names.contains(&name) && !branches_to_delete.contains(&name) {
+            branches_to_delete.push(name);
+        }
+    }
+
+    if branches_to_delete.is_empty() {
         let _ = writeln!(output, "{}", "  No local branches to delete.".green());
         return Ok(output);
     }
 
     let protected = ["main", "master", "develop", "release"];
 
-    for branch in &gone_branches {
+    for branch in &branches_to_delete {
         if protected.contains(branch) {
             let _ = writeln!(
                 output,

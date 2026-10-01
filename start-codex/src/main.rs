@@ -10,7 +10,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 const CATALOG_WINDOW: u64 = 1_050_000;
-const CODEX_MODEL: &str = "gpt-5.6-terra";
+const GPT_6_CATALOG_WINDOW: u64 = 1_000_000;
+const CODEX_MODEL: &str = "gpt-6-sol";
 const GATEWAY_BASE_URL: &str = "https://gptgateway.ncino.ai/openai/v1";
 const GATEWAY_AUTH_COMMAND: &str = "tok=$(aws eks get-token --cluster-name gpt-gateway --region us-east-1 --profile genai --output text --query status.token 2>/dev/null) && printf '%s' \"$tok\" || { echo 'GptGateway: could not mint a token. Check the genai profile exists, then run: aws sso login --profile genai' >&2; exit 1; }";
 const GENAI_ACCOUNT: &str = "714322698969";
@@ -183,25 +184,25 @@ fn reset_context_window(catalog: &mut Value) -> Result<(), String> {
     let mut updated = 0;
 
     for model in models {
-        if model["slug"]
-            .as_str()
-            .is_some_and(|slug| slug.starts_with("gpt-5.6"))
-        {
-            model["context_window"] = Value::from(CATALOG_WINDOW);
-            model["max_context_window"] = Value::from(CATALOG_WINDOW);
-            model["effective_context_window_percent"] = Value::from(100);
-            updated += 1;
-        }
+        let window = match model["slug"].as_str() {
+            Some(slug) if slug.starts_with("gpt-5.6") => CATALOG_WINDOW,
+            Some("gpt-6-sol" | "gpt-6-luna") => GPT_6_CATALOG_WINDOW,
+            _ => continue,
+        };
+        model["context_window"] = Value::from(window);
+        model["max_context_window"] = Value::from(window);
+        model["effective_context_window_percent"] = Value::from(100);
+        updated += 1;
     }
 
     if updated == 0 {
-        return Err("The embedded model catalog has no GPT-5.6 models".to_owned());
+        return Err("The embedded model catalog has no gateway models".to_owned());
     }
 
     Ok(())
 }
 
-// Multi-agent v2 currently omits collaboration tools for the gateway's Sol and Terra models.
+// Multi-agent v2 currently omits collaboration tools for the gateway's GPT-6 agents.
 // Keep named custom-agent delegation on v1 until the v2 runtime exposes those tools.
 fn use_multi_agent_v1(catalog: &mut Value) -> Result<(), String> {
     let models = catalog["models"]
@@ -212,7 +213,7 @@ fn use_multi_agent_v1(catalog: &mut Value) -> Result<(), String> {
     for model in models {
         if model["slug"]
             .as_str()
-            .is_some_and(|slug| slug.starts_with("gpt-5.6"))
+            .is_some_and(|slug| slug == "gpt-6-sol" || slug == "gpt-6-luna")
         {
             model["multi_agent_version"] = Value::from("v1");
             updated += 1;
@@ -220,7 +221,7 @@ fn use_multi_agent_v1(catalog: &mut Value) -> Result<(), String> {
     }
 
     if updated == 0 {
-        return Err("The embedded model catalog has no GPT-5.6 models".to_owned());
+        return Err("The embedded model catalog has no GPT-6 Sol or Luna models".to_owned());
     }
 
     Ok(())
@@ -435,7 +436,7 @@ mod tests {
             .expect("gateway configuration should be valid TOML");
 
         assert!(config.contains("model_provider = \"gpt-gateway\""));
-        assert!(config.contains("model = \"gpt-5.6-terra\""));
+        assert!(config.contains("model = \"gpt-6-sol\""));
         assert!(config.contains("base_url = \"https://gptgateway.ncino.ai/openai/v1\""));
         assert!(config.contains("model_catalog_json = \"/tmp/model-catalog.json\""));
         assert!(config.contains("--cluster-name gpt-gateway"));
@@ -465,21 +466,63 @@ mod tests {
     }
 
     #[test]
-    fn uses_multi_agent_v1_for_all_gpt_56_models() {
+    fn raises_gpt_6_context_windows_to_gateway_limit() {
         let mut catalog = json!({
             "models": [
+                {"slug": "gpt-5.6-terra", "context_window": 272000, "max_context_window": 272000, "effective_context_window_percent": 95},
+                {"slug": "gpt-6-sol", "context_window": 272000, "max_context_window": 872000},
+                {"slug": "gpt-6-luna", "context_window": 272000, "max_context_window": 872000},
+                {"slug": "gpt-6-astra", "context_window": 272000, "max_context_window": 872000}
+            ]
+        });
+
+        reset_context_window(&mut catalog).expect("catalog should contain gateway models");
+
+        for index in [1, 2] {
+            let model = &catalog["models"][index];
+            assert_eq!(model["context_window"], 1_000_000);
+            assert_eq!(model["max_context_window"], 1_000_000);
+            assert_eq!(model["effective_context_window_percent"], 100);
+        }
+        assert_eq!(catalog["models"][0]["context_window"], CATALOG_WINDOW);
+        assert_eq!(catalog["models"][3]["context_window"], 272000);
+    }
+
+    #[test]
+    fn accepts_a_catalog_with_only_gpt_6_models() {
+        let mut catalog = json!({
+            "models": [
+                {"slug": "gpt-6-sol", "context_window": 272000, "max_context_window": 872000, "effective_context_window_percent": 95},
+                {"slug": "gpt-6-luna", "context_window": 272000, "max_context_window": 872000, "effective_context_window_percent": 95}
+            ]
+        });
+
+        reset_context_window(&mut catalog).expect("GPT-6-only catalog should be accepted");
+
+        for index in [0, 1] {
+            let model = &catalog["models"][index];
+            assert_eq!(model["context_window"], 1_000_000);
+            assert_eq!(model["max_context_window"], 1_000_000);
+            assert_eq!(model["effective_context_window_percent"], 100);
+        }
+    }
+
+    #[test]
+    fn uses_multi_agent_v1_for_gpt_6_agents() {
+        let mut catalog = json!({
+            "models": [
+                {"slug": "gpt-6-sol", "multi_agent_version": "v2"},
+                {"slug": "gpt-6-luna", "multi_agent_version": "v2"},
                 {"slug": "gpt-5.6-terra", "multi_agent_version": "v2"},
-                {"slug": "gpt-5.6-sol", "multi_agent_version": "v2"},
-                {"slug": "gpt-5.6-luna", "multi_agent_version": "v1"},
                 {"slug": "gpt-5.5", "multi_agent_version": null}
             ]
         });
 
-        use_multi_agent_v1(&mut catalog).expect("catalog should contain GPT-5.6 models");
+        use_multi_agent_v1(&mut catalog).expect("catalog should contain GPT-6 agents");
 
         assert_eq!(catalog["models"][0]["multi_agent_version"], "v1");
         assert_eq!(catalog["models"][1]["multi_agent_version"], "v1");
-        assert_eq!(catalog["models"][2]["multi_agent_version"], "v1");
+        assert_eq!(catalog["models"][2]["multi_agent_version"], "v2");
         assert_eq!(catalog["models"][3]["multi_agent_version"], json!(null));
     }
 

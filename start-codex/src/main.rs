@@ -10,8 +10,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 const CATALOG_WINDOW: u64 = 1_050_000;
-const GPT_6_CATALOG_WINDOW: u64 = 1_000_000;
-const CODEX_MODEL: &str = "gpt-6-sol";
+const GATEWAY_CATALOG_WINDOW: u64 = 1_000_000;
+const CODEX_MODEL: &str = "gpt-6.1-sol";
 const GATEWAY_BASE_URL: &str = "https://gptgateway.ncino.ai/openai/v1";
 const GATEWAY_AUTH_COMMAND: &str = "tok=$(aws eks get-token --cluster-name gpt-gateway --region us-east-1 --profile genai --output text --query status.token 2>/dev/null) && printf '%s' \"$tok\" || { echo 'GptGateway: could not mint a token. Check the genai profile exists, then run: aws sso login --profile genai' >&2; exit 1; }";
 const GENAI_ACCOUNT: &str = "714322698969";
@@ -186,7 +186,7 @@ fn reset_context_window(catalog: &mut Value) -> Result<(), String> {
     for model in models {
         let window = match model["slug"].as_str() {
             Some(slug) if slug.starts_with("gpt-5.6") => CATALOG_WINDOW,
-            Some("gpt-6-sol" | "gpt-6-luna") => GPT_6_CATALOG_WINDOW,
+            Some("gpt-6.1-sol" | "gpt-6-luna") => GATEWAY_CATALOG_WINDOW,
             _ => continue,
         };
         model["context_window"] = Value::from(window);
@@ -202,9 +202,8 @@ fn reset_context_window(catalog: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
-// Multi-agent v2 currently omits collaboration tools for the gateway's GPT-6 agents.
-// Keep named custom-agent delegation on v1 until the v2 runtime exposes those tools.
-fn use_multi_agent_v1(catalog: &mut Value) -> Result<(), String> {
+// Use the gateway-compatible delegation and web search settings from its setup guide.
+fn configure_gateway_model_features(catalog: &mut Value) -> Result<(), String> {
     let models = catalog["models"]
         .as_array_mut()
         .ok_or("The embedded model catalog has no models array")?;
@@ -213,15 +212,25 @@ fn use_multi_agent_v1(catalog: &mut Value) -> Result<(), String> {
     for model in models {
         if model["slug"]
             .as_str()
-            .is_some_and(|slug| slug == "gpt-6-sol" || slug == "gpt-6-luna")
+            .is_some_and(|slug| slug == "gpt-6.1-sol" || slug == "gpt-6-luna")
         {
-            model["multi_agent_version"] = Value::from("v1");
+            if model["multi_agent_version"] == "v2" {
+                model["multi_agent_version"] = Value::from("v1");
+            }
+            if model.get("use_responses_lite").is_some() {
+                model["use_responses_lite"] = Value::from(false);
+            }
+            if model.get("web_search_tool_type").is_some() {
+                model["web_search_tool_type"] = Value::from("text");
+            }
             updated += 1;
         }
     }
 
     if updated == 0 {
-        return Err("The embedded model catalog has no GPT-6 Sol or Luna models".to_owned());
+        return Err(
+            "The embedded model catalog has no GPT-6.1 Sol or GPT-6 Luna models".to_owned(),
+        );
     }
 
     Ok(())
@@ -293,7 +302,7 @@ fn write_configuration() -> Result<(), String> {
             .map_err(|error| format!("Could not read {}: {error}", native_binary.display()))?,
     )?;
     reset_context_window(&mut catalog)?;
-    use_multi_agent_v1(&mut catalog)?;
+    configure_gateway_model_features(&mut catalog)?;
 
     let catalog_path = codex_home.join("model-catalog.json");
     let catalog_contents = serde_json::to_string_pretty(&catalog)
@@ -383,8 +392,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        CATALOG_WINDOW, Cli, configure_gateway, extract_catalog, is_genai_account,
-        reset_context_window, resolve_github_pat_token, use_multi_agent_v1,
+        CATALOG_WINDOW, Cli, configure_gateway, configure_gateway_model_features, extract_catalog,
+        is_genai_account, reset_context_window, resolve_github_pat_token,
     };
     use clap::Parser;
     use serde_json::json;
@@ -436,7 +445,7 @@ mod tests {
             .expect("gateway configuration should be valid TOML");
 
         assert!(config.contains("model_provider = \"gpt-gateway\""));
-        assert!(config.contains("model = \"gpt-6-sol\""));
+        assert!(config.contains("model = \"gpt-6.1-sol\""));
         assert!(config.contains("base_url = \"https://gptgateway.ncino.ai/openai/v1\""));
         assert!(config.contains("model_catalog_json = \"/tmp/model-catalog.json\""));
         assert!(config.contains("--cluster-name gpt-gateway"));
@@ -466,13 +475,14 @@ mod tests {
     }
 
     #[test]
-    fn raises_gpt_6_context_windows_to_gateway_limit() {
+    fn raises_sol_61_and_luna_context_windows_to_gateway_limit() {
         let mut catalog = json!({
             "models": [
                 {"slug": "gpt-5.6-terra", "context_window": 272000, "max_context_window": 272000, "effective_context_window_percent": 95},
-                {"slug": "gpt-6-sol", "context_window": 272000, "max_context_window": 872000},
+                {"slug": "gpt-6.1-sol", "context_window": 272000, "max_context_window": 872000},
                 {"slug": "gpt-6-luna", "context_window": 272000, "max_context_window": 872000},
-                {"slug": "gpt-6-astra", "context_window": 272000, "max_context_window": 872000}
+                {"slug": "gpt-6-astra", "context_window": 272000, "max_context_window": 872000},
+                {"slug": "gpt-6-sol", "context_window": 272000, "max_context_window": 872000}
             ]
         });
 
@@ -486,44 +496,88 @@ mod tests {
         }
         assert_eq!(catalog["models"][0]["context_window"], CATALOG_WINDOW);
         assert_eq!(catalog["models"][3]["context_window"], 272000);
+        assert_eq!(catalog["models"][4]["context_window"], 272000);
     }
 
     #[test]
-    fn accepts_a_catalog_with_only_gpt_6_models() {
+    fn accepts_a_catalog_with_only_sol_61() {
         let mut catalog = json!({
             "models": [
-                {"slug": "gpt-6-sol", "context_window": 272000, "max_context_window": 872000, "effective_context_window_percent": 95},
-                {"slug": "gpt-6-luna", "context_window": 272000, "max_context_window": 872000, "effective_context_window_percent": 95}
+                {"slug": "gpt-6.1-sol", "context_window": 272000, "max_context_window": 872000, "effective_context_window_percent": 95}
             ]
         });
 
-        reset_context_window(&mut catalog).expect("GPT-6-only catalog should be accepted");
+        reset_context_window(&mut catalog).expect("Sol 6.1-only catalog should be accepted");
 
-        for index in [0, 1] {
-            let model = &catalog["models"][index];
-            assert_eq!(model["context_window"], 1_000_000);
-            assert_eq!(model["max_context_window"], 1_000_000);
-            assert_eq!(model["effective_context_window_percent"], 100);
-        }
+        let model = &catalog["models"][0];
+        assert_eq!(model["context_window"], 1_000_000);
+        assert_eq!(model["max_context_window"], 1_000_000);
+        assert_eq!(model["effective_context_window_percent"], 100);
     }
 
     #[test]
-    fn uses_multi_agent_v1_for_gpt_6_agents() {
+    fn uses_multi_agent_v1_for_sol_61_and_luna_agents() {
         let mut catalog = json!({
             "models": [
-                {"slug": "gpt-6-sol", "multi_agent_version": "v2"},
+                {"slug": "gpt-6.1-sol", "multi_agent_version": "v2"},
                 {"slug": "gpt-6-luna", "multi_agent_version": "v2"},
                 {"slug": "gpt-5.6-terra", "multi_agent_version": "v2"},
-                {"slug": "gpt-5.5", "multi_agent_version": null}
+                {"slug": "gpt-5.5", "multi_agent_version": null},
+                {"slug": "gpt-6-sol", "multi_agent_version": "v2"}
             ]
         });
 
-        use_multi_agent_v1(&mut catalog).expect("catalog should contain GPT-6 agents");
+        configure_gateway_model_features(&mut catalog)
+            .expect("catalog should contain gateway agents");
 
         assert_eq!(catalog["models"][0]["multi_agent_version"], "v1");
         assert_eq!(catalog["models"][1]["multi_agent_version"], "v1");
         assert_eq!(catalog["models"][2]["multi_agent_version"], "v2");
         assert_eq!(catalog["models"][3]["multi_agent_version"], json!(null));
+        assert_eq!(catalog["models"][4]["multi_agent_version"], "v2");
+    }
+
+    #[test]
+    fn uses_multi_agent_v1_with_only_sol_61() {
+        let mut catalog = json!({
+            "models": [{"slug": "gpt-6.1-sol", "multi_agent_version": "v2"}]
+        });
+
+        configure_gateway_model_features(&mut catalog)
+            .expect("Sol 6.1-only catalog should be accepted");
+
+        assert_eq!(catalog["models"][0]["multi_agent_version"], "v1");
+    }
+
+    #[test]
+    fn migrates_the_existing_sol_6_default() {
+        let config = configure_gateway("model = \"gpt-6-sol\"\n", "/tmp/model-catalog.json")
+            .expect("existing Sol 6 configuration should be migrated");
+
+        assert!(config.contains("model = \"gpt-6.1-sol\""));
+        assert!(!config.contains("model = \"gpt-6-sol\""));
+    }
+
+    #[test]
+    fn configures_gateway_web_search_without_adding_unsupported_fields() {
+        let mut catalog = json!({
+            "models": [
+                {"slug": "gpt-6.1-sol", "multi_agent_version": "v2", "use_responses_lite": true, "web_search_tool_type": "text_and_image"},
+                {"slug": "gpt-6-luna", "multi_agent_version": "v1"},
+                {"slug": "gpt-6-sol", "multi_agent_version": "v2", "use_responses_lite": true, "web_search_tool_type": "text_and_image"}
+            ]
+        });
+        let old_sol = catalog["models"][2].clone();
+
+        configure_gateway_model_features(&mut catalog)
+            .expect("gateway features should be configured");
+
+        assert_eq!(catalog["models"][0]["use_responses_lite"], false);
+        assert_eq!(catalog["models"][0]["web_search_tool_type"], "text");
+        assert_eq!(catalog["models"][1]["multi_agent_version"], "v1");
+        assert!(catalog["models"][1].get("use_responses_lite").is_none());
+        assert!(catalog["models"][1].get("web_search_tool_type").is_none());
+        assert_eq!(catalog["models"][2], old_sol);
     }
 
     #[test]

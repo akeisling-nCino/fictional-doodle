@@ -294,7 +294,8 @@ fn find_native_codex_binary() -> Result<PathBuf, String> {
     Err("Could not find the native Codex binary".to_owned())
 }
 
-fn write_configuration() -> Result<(), String> {
+// Returns whether the model catalog on disk changed.
+fn write_configuration() -> Result<bool, String> {
     let codex_home = codex_home()?;
     fs::create_dir_all(&codex_home)
         .map_err(|error| format!("Could not create {}: {error}", codex_home.display()))?;
@@ -310,7 +311,10 @@ fn write_configuration() -> Result<(), String> {
     let catalog_path = codex_home.join("model-catalog.json");
     let catalog_contents = serde_json::to_string_pretty(&catalog)
         .map_err(|error| format!("Could not serialize the model catalog: {error}"))?;
-    fs::write(&catalog_path, format!("{catalog_contents}\n"))
+    let catalog_contents = format!("{catalog_contents}\n");
+    let catalog_changed = !fs::read_to_string(&catalog_path)
+        .is_ok_and(|existing| existing == catalog_contents);
+    fs::write(&catalog_path, &catalog_contents)
         .map_err(|error| format!("Could not write {}: {error}", catalog_path.display()))?;
 
     let config_path = codex_home.join("config.toml");
@@ -342,7 +346,29 @@ fn write_configuration() -> Result<(), String> {
             .map_err(|error| format!("Could not write {}: {error}", config_path.display()))?;
     }
 
-    Ok(())
+    Ok(catalog_changed)
+}
+
+// The app-server daemon outlives Codex sessions and reads the model catalog at startup,
+// so a changed catalog is ignored until the daemon restarts.
+fn restart_daemon() {
+    println!(
+        "{}",
+        "Model catalog changed, restarting the Codex app-server daemon...".yellow()
+    );
+    let output = Command::new("codex")
+        .args(["app-server", "daemon", "restart"])
+        .output()
+        .expect("Failed to run codex");
+
+    if !output.status.success() {
+        eprintln!(
+            "{} {}",
+            "Codex daemon restart failed:".red(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::process::exit(1);
+    }
 }
 
 fn resolve_github_pat_token(
@@ -385,9 +411,15 @@ fn main() {
     let cli = Cli::parse();
     run_sso_login();
     verify_genai_account();
-    if let Err(error) = write_configuration() {
-        eprintln!("{} {error}", "Codex configuration failed:".red());
-        std::process::exit(1);
+    let catalog_changed = match write_configuration() {
+        Ok(changed) => changed,
+        Err(error) => {
+            eprintln!("{} {error}", "Codex configuration failed:".red());
+            std::process::exit(1);
+        }
+    };
+    if catalog_changed {
+        restart_daemon();
     }
     launch_codex(cli.dir);
 }

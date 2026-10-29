@@ -186,7 +186,7 @@ fn reset_context_window(catalog: &mut Value) -> Result<(), String> {
     for model in models {
         let window = match model["slug"].as_str() {
             Some(slug) if slug.starts_with("gpt-5.6") => CATALOG_WINDOW,
-            Some("gpt-6.1-sol" | "gpt-6-luna") => GATEWAY_CATALOG_WINDOW,
+            Some("gpt-6.1-sol" | "gpt-6.1-terra" | "gpt-6-luna") => GATEWAY_CATALOG_WINDOW,
             _ => continue,
         };
         model["context_window"] = Value::from(window);
@@ -212,7 +212,9 @@ fn configure_gateway_model_features(catalog: &mut Value) -> Result<(), String> {
     for model in models {
         if model["slug"]
             .as_str()
-            .is_some_and(|slug| slug == "gpt-6.1-sol" || slug == "gpt-6-luna")
+            .is_some_and(|slug| {
+                slug == "gpt-6.1-sol" || slug == "gpt-6.1-terra" || slug == "gpt-6-luna"
+            })
         {
             if model["multi_agent_version"] == "v2" {
                 model["multi_agent_version"] = Value::from("v1");
@@ -229,7 +231,8 @@ fn configure_gateway_model_features(catalog: &mut Value) -> Result<(), String> {
 
     if updated == 0 {
         return Err(
-            "The embedded model catalog has no GPT-6.1 Sol or GPT-6 Luna models".to_owned(),
+            "The embedded model catalog has no GPT-6.1 Sol, GPT-6.1 Terra, or GPT-6 Luna models"
+                .to_owned(),
         );
     }
 
@@ -475,20 +478,21 @@ mod tests {
     }
 
     #[test]
-    fn raises_sol_61_and_luna_context_windows_to_gateway_limit() {
+    fn raises_sol_61_terra_61_and_luna_context_windows_to_gateway_limit() {
         let mut catalog = json!({
             "models": [
                 {"slug": "gpt-5.6-terra", "context_window": 272000, "max_context_window": 272000, "effective_context_window_percent": 95},
                 {"slug": "gpt-6.1-sol", "context_window": 272000, "max_context_window": 872000},
                 {"slug": "gpt-6-luna", "context_window": 272000, "max_context_window": 872000},
                 {"slug": "gpt-6-astra", "context_window": 272000, "max_context_window": 872000},
-                {"slug": "gpt-6-sol", "context_window": 272000, "max_context_window": 872000}
+                {"slug": "gpt-6-sol", "context_window": 272000, "max_context_window": 872000},
+                {"slug": "gpt-6.1-terra", "context_window": 500000, "max_context_window": 872000, "effective_context_window_percent": null}
             ]
         });
 
         reset_context_window(&mut catalog).expect("catalog should contain gateway models");
 
-        for index in [1, 2] {
+        for index in [1, 2, 5] {
             let model = &catalog["models"][index];
             assert_eq!(model["context_window"], 1_000_000);
             assert_eq!(model["max_context_window"], 1_000_000);
@@ -564,7 +568,8 @@ mod tests {
             "models": [
                 {"slug": "gpt-6.1-sol", "multi_agent_version": "v2", "use_responses_lite": true, "web_search_tool_type": "text_and_image"},
                 {"slug": "gpt-6-luna", "multi_agent_version": "v1"},
-                {"slug": "gpt-6-sol", "multi_agent_version": "v2", "use_responses_lite": true, "web_search_tool_type": "text_and_image"}
+                {"slug": "gpt-6-sol", "multi_agent_version": "v2", "use_responses_lite": true, "web_search_tool_type": "text_and_image"},
+                {"slug": "gpt-6.1-terra", "multi_agent_version": "v2", "use_responses_lite": true, "web_search_tool_type": "text_and_image"}
             ]
         });
         let old_sol = catalog["models"][2].clone();
@@ -574,6 +579,9 @@ mod tests {
 
         assert_eq!(catalog["models"][0]["use_responses_lite"], false);
         assert_eq!(catalog["models"][0]["web_search_tool_type"], "text");
+        assert_eq!(catalog["models"][3]["multi_agent_version"], "v1");
+        assert_eq!(catalog["models"][3]["use_responses_lite"], false);
+        assert_eq!(catalog["models"][3]["web_search_tool_type"], "text");
         assert_eq!(catalog["models"][1]["multi_agent_version"], "v1");
         assert!(catalog["models"][1].get("use_responses_lite").is_none());
         assert!(catalog["models"][1].get("web_search_tool_type").is_none());
